@@ -3,6 +3,7 @@ import '../widgets/profile_header.dart';
 import '../widgets/stat_section.dart';
 import '../widgets/genre_section.dart';
 import '../widgets/app_bar.dart';
+import 'sign_up_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -28,7 +29,19 @@ class ProfileScreen extends StatelessWidget {
                   onPressed: () {},
                   child: const Text('프로필 수정'),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 12),
+
+                // TODO: Week 2 회원가입 화면 확인용 임시 버튼 — 확인 후 제거
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                    );
+                  },
+                  child: const Text('회원가입 화면 보기 (임시)'),
+                ),
+                const SizedBox(height: 20),
                 
                 const StatSection(),
                 const SizedBox(height: 32),
