@@ -6,6 +6,9 @@ import '../theme/app_colors.dart';
 import '../widgets/movie_rating_input_dialog.dart';
 import '../widgets/similar_movies_section.dart';
 
+// TODO(5주차 TMDB 연동): 홈/목록은 TMDB id를 쓰지만 이 화면은 아직 Mock
+// 데이터(findMovieById)를 그대로 써서, TMDB 영화를 눌러 들어오면 "영화를
+// 찾을 수 없어요"가 뜬다. 상세 화면의 TMDB 전환은 이번 주 범위 밖.
 class MovieDetailScreen extends StatefulWidget {
   final String movieId;
 

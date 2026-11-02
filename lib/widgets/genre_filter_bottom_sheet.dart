@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
+import '../data/models/tmdb_genre_dto.dart';
 import '../theme/app_colors.dart';
 
 /// 장르 다중 선택 BottomSheet. 핸들을 드래그해 높이를 조절할 수 있고,
 /// 체크박스 목록만 스크롤되며 "확인" 버튼은 하단에 고정된다.
 /// 선택 결과는 "확인"을 눌렀을 때만 반환되고, 그 전까지는 시트 내부
 /// 임시 상태로만 존재한다 (취소/드래그로 닫으면 null 반환, 반영 안 됨).
-Future<Set<String>?> showGenreFilterBottomSheet(
+Future<Set<int>?> showGenreFilterBottomSheet(
   BuildContext context, {
-  required List<String> genres,
-  required Set<String> initialSelected,
+  required List<TmdbGenreDto> genres,
+  required Set<int> initialSelected,
 }) {
-  return showModalBottomSheet<Set<String>>(
+  return showModalBottomSheet<Set<int>>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -22,8 +23,8 @@ Future<Set<String>?> showGenreFilterBottomSheet(
 }
 
 class _GenreFilterSheetContent extends StatefulWidget {
-  final List<String> genres;
-  final Set<String> initialSelected;
+  final List<TmdbGenreDto> genres;
+  final Set<int> initialSelected;
 
   const _GenreFilterSheetContent({
     required this.genres,
@@ -36,7 +37,7 @@ class _GenreFilterSheetContent extends StatefulWidget {
 }
 
 class _GenreFilterSheetContentState extends State<_GenreFilterSheetContent> {
-  late final Set<String> _tempSelected = {...widget.initialSelected};
+  late final Set<int> _tempSelected = {...widget.initialSelected};
   double _heightFactor = 0.6;
 
   static const double _minHeightFactor = 0.35;
@@ -94,16 +95,16 @@ class _GenreFilterSheetContentState extends State<_GenreFilterSheetContent> {
               children: [
                 for (final genre in widget.genres)
                   CheckboxListTile(
-                    title: Text(genre),
-                    value: _tempSelected.contains(genre),
+                    title: Text(genre.name),
+                    value: _tempSelected.contains(genre.id),
                     activeColor: AppColors.primary,
                     controlAffinity: ListTileControlAffinity.leading,
                     onChanged: (checked) {
                       setState(() {
                         if (checked ?? false) {
-                          _tempSelected.add(genre);
+                          _tempSelected.add(genre.id);
                         } else {
-                          _tempSelected.remove(genre);
+                          _tempSelected.remove(genre.id);
                         }
                       });
                     },
