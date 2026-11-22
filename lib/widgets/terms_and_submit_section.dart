@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
+import 'movielog_button.dart';
 
 /// 약관 동의 체크박스 + 가입 버튼 + 로그인 안내 문구 섹션.
 class TermsAndSubmitSection extends StatelessWidget {
@@ -49,24 +51,12 @@ class TermsAndSubmitSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 24),
-        SizedBox(
-          height: 52,
-          child: ElevatedButton(
-            onPressed: isSubmitEnabled ? onSubmit : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: colorScheme.primary.withValues(
-                alpha: 0.4,
-              ),
-              disabledForegroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: const Text('가입하기'),
-          ),
+        MovieLogButton(
+          label: '가입하기',
+          onPressed: isSubmitEnabled ? onSubmit : null,
+          width: double.infinity,
+          disabledBackgroundColor: AppColors.primaryLight,
+          disabledForegroundColor: AppColors.primary,
         ),
         const SizedBox(height: 20),
         Row(

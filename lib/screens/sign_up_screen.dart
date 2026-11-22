@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_colors.dart';
 import '../utils/validators.dart';
+import '../view_models/sign_up_view_model.dart';
 import '../widgets/sign_up_header.dart';
 import '../widgets/sign_up_form_section.dart';
 import '../widgets/terms_and_submit_section.dart';
@@ -51,14 +53,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  bool get _isNicknameValid =>
+  bool get _isNicknameFormatValid =>
       Validators.nickname(_nicknameController.text) == null;
-  bool get _isEmailValid => Validators.email(_emailController.text) == null;
+  bool get _isEmailFormatValid =>
+      Validators.email(_emailController.text) == null;
   bool get _isPasswordValid =>
       Validators.password(_passwordController.text) == null;
 
-  bool get _isSubmitEnabled =>
-      _isNicknameValid && _isEmailValid && _isPasswordValid && _agreedToTerms;
+  bool _isSubmitEnabled(SignUpViewModel viewModel) =>
+      _isNicknameFormatValid &&
+      _isEmailFormatValid &&
+      _isPasswordValid &&
+      _agreedToTerms &&
+      viewModel.nicknameStatus == CheckStatus.available &&
+      viewModel.emailStatus == CheckStatus.available;
 
   void _handleSubmit() {
     setState(() {
@@ -70,7 +78,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final isValid = _formKey.currentState?.validate() ?? false;
     FocusScope.of(context).unfocus();
 
-    if (isValid && _agreedToTerms) {
+    if (isValid && _isSubmitEnabled(context.read<SignUpViewModel>())) {
       // Mock 회원가입: 실제 API 연동 없이 홈으로 이동.
       // go()를 사용해 스택을 교체하므로 홈 화면에서 시스템 뒤로가기로
       // 회원가입 화면으로 돌아갈 수 없다.
@@ -80,6 +88,50 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final viewModel = context.watch<SignUpViewModel>();
+
+    final nicknameFormatError = _nicknameTouched
+        ? Validators.nickname(_nicknameController.text)
+        : null;
+    final emailFormatError = _emailTouched
+        ? Validators.email(_emailController.text)
+        : null;
+
+    final nicknameErrorText =
+        nicknameFormatError ??
+        (viewModel.nicknameStatus == CheckStatus.duplicated ||
+                viewModel.nicknameStatus == CheckStatus.error
+            ? viewModel.nicknameErrorText
+            : null);
+    final emailErrorText =
+        emailFormatError ??
+        (viewModel.emailStatus == CheckStatus.duplicated ||
+                viewModel.emailStatus == CheckStatus.error
+            ? viewModel.emailErrorText
+            : null);
+
+    final nicknameHelperText = nicknameFormatError != null
+        ? null
+        : switch (viewModel.nicknameStatus) {
+            CheckStatus.checking => '닉네임 사용 가능 여부를 확인 중입니다.',
+            CheckStatus.available => '사용 가능한 닉네임입니다.',
+            _ => null,
+          };
+    final emailHelperText = emailFormatError != null
+        ? null
+        : switch (viewModel.emailStatus) {
+            CheckStatus.checking => '이메일 사용 가능 여부를 확인 중입니다.',
+            CheckStatus.available => '사용 가능한 이메일입니다.',
+            _ => null,
+          };
+
+    final isNicknameValid =
+        nicknameFormatError == null &&
+        viewModel.nicknameStatus == CheckStatus.available;
+    final isEmailValid =
+        emailFormatError == null &&
+        viewModel.emailStatus == CheckStatus.available;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.background,
@@ -126,24 +178,48 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           passwordController: _passwordController,
                           emailFocusNode: _emailFocusNode,
                           passwordFocusNode: _passwordFocusNode,
-                          nicknameErrorText: _nicknameTouched
-                              ? Validators.nickname(_nicknameController.text)
-                              : null,
-                          emailErrorText: _emailTouched
-                              ? Validators.email(_emailController.text)
-                              : null,
+                          nicknameErrorText: nicknameErrorText,
+                          emailErrorText: emailErrorText,
                           passwordErrorText: _passwordTouched
                               ? Validators.password(_passwordController.text)
                               : null,
-                          isNicknameValid: _nicknameTouched && _isNicknameValid,
-                          isEmailValid: _emailTouched && _isEmailValid,
+                          isNicknameValid: isNicknameValid,
+                          isEmailValid: isEmailValid,
                           isPasswordValid: _passwordTouched && _isPasswordValid,
+                          nicknameHelperText: nicknameHelperText,
+                          nicknameHelperColor:
+                              viewModel.nicknameStatus == CheckStatus.checking
+                              ? Colors.blue
+                              : AppColors.successGreen,
+                          emailHelperText: emailHelperText,
+                          emailHelperColor:
+                              viewModel.emailStatus == CheckStatus.checking
+                              ? Colors.blue
+                              : AppColors.successGreen,
+                          isNicknameChecking:
+                              viewModel.nicknameStatus == CheckStatus.checking,
+                          isEmailChecking:
+                              viewModel.emailStatus == CheckStatus.checking,
+                          onCheckNickname:
+                              nicknameFormatError == null &&
+                                  viewModel.nicknameStatus !=
+                                      CheckStatus.checking
+                              ? viewModel.checkNickname
+                              : null,
+                          onCheckEmail:
+                              emailFormatError == null &&
+                                  viewModel.emailStatus != CheckStatus.checking
+                              ? viewModel.checkEmail
+                              : null,
                           obscurePassword: _obscurePassword,
-                          onNicknameChanged: (value) => setState(
-                            () => _nicknameTouched = true,
-                          ),
-                          onEmailChanged: (value) =>
-                              setState(() => _emailTouched = true),
+                          onNicknameChanged: (value) {
+                            setState(() => _nicknameTouched = true);
+                            viewModel.onNicknameChanged(value);
+                          },
+                          onEmailChanged: (value) {
+                            setState(() => _emailTouched = true);
+                            viewModel.onEmailChanged(value);
+                          },
                           onPasswordChanged: (value) =>
                               setState(() => _passwordTouched = true),
                           onTogglePasswordVisibility: () => setState(
@@ -162,7 +238,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           agreedToTerms: _agreedToTerms,
                           onAgreedToTermsChanged: (value) =>
                               setState(() => _agreedToTerms = value),
-                          isSubmitEnabled: _isSubmitEnabled,
+                          isSubmitEnabled: _isSubmitEnabled(viewModel),
                           onSubmit: _handleSubmit,
                         ),
                       ],

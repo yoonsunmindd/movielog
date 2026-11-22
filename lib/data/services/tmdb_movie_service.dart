@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../models/tmdb_genre_dto.dart';
+import '../models/tmdb_movie_dto.dart';
 import '../models/tmdb_movie_page.dart';
 
 /// TMDB API 호출 + DTO 변환만 담당한다.
@@ -36,6 +37,24 @@ class TmdbMovieService {
       },
     );
     return TmdbMoviePageDto.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<TmdbMovieDto> fetchMovieDetail(int movieId) async {
+    final response = await _dio.get(
+      '/movie/$movieId',
+      queryParameters: {'language': 'ko-KR'},
+    );
+    return TmdbMovieDto.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// movieId를 못 찾으면(404) null을 돌려준다. 그 외 오류는 그대로 던진다.
+  Future<TmdbMovieDto?> findMovieById(int movieId) async {
+    try {
+      return await fetchMovieDetail(movieId);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
   }
 
   Future<List<TmdbGenreDto>> fetchGenres() async {

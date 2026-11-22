@@ -6,9 +6,11 @@ import '../theme/app_colors.dart';
 /// 재사용 가능한 TextFormField.
 class MovieLogTextFormField extends StatelessWidget {
   final TextEditingController controller;
-  final String label;
+  final String? label;
   final String hintText;
   final String? errorText;
+  final String? helperText;
+  final Color? helperColor;
   final bool isValid;
   final TextInputType keyboardType;
   final TextInputAction textInputAction;
@@ -22,10 +24,12 @@ class MovieLogTextFormField extends StatelessWidget {
   const MovieLogTextFormField({
     super.key,
     required this.controller,
-    required this.label,
+    this.label,
     required this.hintText,
     required this.validator,
     this.errorText,
+    this.helperText,
+    this.helperColor,
     this.isValid = false,
     this.keyboardType = TextInputType.text,
     this.textInputAction = TextInputAction.next,
@@ -45,13 +49,15 @@ class MovieLogTextFormField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            fontWeight: FontWeight.w700,
+        if (label != null) ...[
+          Text(
+            label!,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
+          const SizedBox(height: 8),
+        ],
         TextFormField(
           controller: controller,
           focusNode: focusNode,
@@ -68,6 +74,11 @@ class MovieLogTextFormField extends StatelessWidget {
               context,
             ).textTheme.bodyLarge?.copyWith(color: AppColors.textTertiary),
             errorText: errorText,
+            helperText: helperText,
+            helperStyle: helperColor != null
+                ? TextStyle(color: helperColor)
+                : null,
+            helperMaxLines: 2,
             filled: true,
             fillColor: _hasError
                 ? AppColors.errorRed.withValues(alpha: 0.12)

@@ -1,11 +1,42 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
+import 'package:movielog/data/services/member_check_service.dart';
 import 'package:movielog/screens/sign_up_screen.dart';
+import 'package:movielog/view_models/sign_up_view_model.dart';
 
 void main() {
+  /// 실제 네트워크를 타지 않고 항상 "사용 가능" 응답을 돌려주는 가짜 Dio.
+  Dio fakeAvailableDio() {
+    final dio = Dio();
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {'available': true},
+            ),
+          );
+        },
+      ),
+    );
+    return dio;
+  }
+
   Future<void> pumpSignUpScreen(WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: SignUpScreen()));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<SignUpViewModel>(
+          create: (_) =>
+              SignUpViewModel(MemberCheckService(fakeAvailableDio())),
+          child: const SignUpScreen(),
+        ),
+      ),
+    );
   }
 
   testWidgets('입력 전에는 오류 메시지와 검증 아이콘이 보이지 않는다', (tester) async {
@@ -34,7 +65,9 @@ void main() {
     expect(find.text('비밀번호는 8자 이상 입력해주세요.'), findsOneWidget);
   });
 
-  testWidgets('모든 값이 유효하고 약관에 동의하면 가입 버튼이 활성화된다', (tester) async {
+  testWidgets('닉네임/이메일 중복 확인을 통과하고 약관에 동의하면 가입 버튼이 활성화된다', (
+    tester,
+  ) async {
     await pumpSignUpScreen(tester);
 
     await tester.enterText(find.byType(TextFormField).at(0), '무비러버');
@@ -44,6 +77,13 @@ void main() {
     );
     await tester.enterText(find.byType(TextFormField).at(2), 'password123');
     await tester.pump();
+
+    await tester.tap(find.widgetWithText(ElevatedButton, '중복 확인').at(0));
+    await tester.tap(find.widgetWithText(ElevatedButton, '중복 확인').at(1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('사용 가능한 닉네임입니다.'), findsOneWidget);
+    expect(find.text('사용 가능한 이메일입니다.'), findsOneWidget);
 
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
