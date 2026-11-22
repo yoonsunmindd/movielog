@@ -137,7 +137,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    '먼저 회원가입을 완료해 주세요',
+                    '평점을 남기려면 로그인이 필요해요',
                     style: textTheme.bodyMedium?.copyWith(
                       color: AppColors.errorRed,
                     ),

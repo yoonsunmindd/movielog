@@ -1,30 +1,36 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../core/network/api_error.dart';
 import '../data/models/rating_with_movie.dart';
 import '../data/models/tmdb_movie_dto.dart';
 import '../data/services/rating_api_service.dart';
 import '../data/services/tmdb_movie_service.dart';
+import 'auth_view_model.dart';
+import 'session_ratings_store.dart';
 
-enum MyRatingsStatus { idle, loading, success, empty, error }
+enum MyRatingsStatus { idle, loading, success, empty }
 
+/// v7에는 토큰 기반 "내 평점 전체 조회"가 없어서, 이 화면은 서버에서 다시
+/// 불러오지 않고 SessionRatingsStore(이번 로그인 세션에서 등록/수정/삭제한
+/// 평점)를 보여준다. 여기서 하는 비동기 작업은 TMDB 포스터/제목 조회뿐이다.
 class MyRatingsViewModel extends ChangeNotifier {
-  final int memberId;
   final RatingApiService _ratingApiService;
   final TmdbMovieService _tmdbMovieService;
+  final AuthViewModel _authViewModel;
+  final SessionRatingsStore _sessionRatingsStore;
 
   MyRatingsViewModel(
-    this.memberId,
     this._ratingApiService,
     this._tmdbMovieService,
-  );
+    this._authViewModel,
+    this._sessionRatingsStore,
+  ) {
+    _sessionRatingsStore.addListener(_handleStoreChanged);
+  }
 
   MyRatingsStatus status = MyRatingsStatus.idle;
   List<RatingWithMovie> ratings = [];
   String? message;
-
-  /// 쓰기(등록/수정/삭제)는 성공했지만 그 직후 재조회가 실패했을 때만 쓴다.
-  /// 목록은 쓰기 성공 이전 상태로 유지하고, 이 문구로 "다시 조회"를 안내한다.
-  String? refreshWarning;
 
   final Map<int, TmdbMovieDto?> _movieCache = {};
   bool _disposed = false;
@@ -33,86 +39,22 @@ class MyRatingsViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _sessionRatingsStore.removeListener(_handleStoreChanged);
     super.dispose();
   }
 
+  void _handleStoreChanged() => load();
+
   Future<void> load() async {
     final version = ++_requestVersion;
+    final sessionVersion = _authViewModel.sessionVersion;
     status = MyRatingsStatus.loading;
     message = null;
-    refreshWarning = null;
     notifyListeners();
-
-    try {
-      final built = await _fetchRatingsWithMovies();
-      if (version != _requestVersion || _disposed) return;
-      ratings = built.ratings;
-      status = ratings.isEmpty ? MyRatingsStatus.empty : MyRatingsStatus.success;
-      message = built.anyMovieFailed ? '일부 영화 정보를 불러오지 못했어요.' : null;
-    } on DioException catch (e) {
-      if (version != _requestVersion || _disposed) return;
-      status = MyRatingsStatus.error;
-      message = writeErrorMessage(e);
-    } catch (e) {
-      if (version != _requestVersion || _disposed) return;
-      status = MyRatingsStatus.error;
-      message = '평점을 불러오지 못했어요.';
-    }
-
-    if (!_disposed) notifyListeners();
-  }
-
-  Future<void> updateRating(int ratingId, int score, String? comment) async {
-    await _writeAndRefresh(
-      () => _ratingApiService.updateRating(memberId, ratingId, score, comment),
-    );
-  }
-
-  Future<void> deleteRating(int ratingId) async {
-    await _writeAndRefresh(
-      () => _ratingApiService.deleteRating(memberId, ratingId),
-    );
-  }
-
-  /// 쓰기 요청을 보내고, 실패하면 message를 세팅한 뒤 (필요하면 재조회하고)
-  /// 그대로 다시 던져서 호출한 Dialog가 실패로 처리하게 한다. 성공하면
-  /// 재조회하되, 그 재조회 자체가 실패해도 쓰기는 실패로 취급하지 않는다.
-  Future<void> _writeAndRefresh(Future<void> Function() write) async {
-    try {
-      await write();
-    } on DioException catch (e) {
-      message = writeErrorMessage(e);
-      if (shouldRefreshAfterRatingError(e)) {
-        await load();
-      } else if (!_disposed) {
-        notifyListeners();
-      }
-      rethrow;
-    }
-
-    await _refreshAfterWrite();
-  }
-
-  Future<void> _refreshAfterWrite() async {
-    try {
-      final built = await _fetchRatingsWithMovies();
-      ratings = built.ratings;
-      status = ratings.isEmpty ? MyRatingsStatus.empty : MyRatingsStatus.success;
-      message = built.anyMovieFailed ? '일부 영화 정보를 불러오지 못했어요.' : null;
-      refreshWarning = null;
-    } catch (e) {
-      refreshWarning = '최신 목록을 다시 불러오지 못했어요.';
-    }
-
-    if (!_disposed) notifyListeners();
-  }
-
-  Future<_RatingsFetchResult> _fetchRatingsWithMovies() async {
-    final fetchedRatings = await _ratingApiService.fetchMyRatings(memberId);
 
     var anyMovieFailed = false;
     final result = <RatingWithMovie>[];
-    for (final rating in fetchedRatings) {
+    for (final rating in _sessionRatingsStore.ratings) {
       TmdbMovieDto? movie;
       if (_movieCache.containsKey(rating.movieId)) {
         movie = _movieCache[rating.movieId];
@@ -125,16 +67,65 @@ class MyRatingsViewModel extends ChangeNotifier {
           movie = null;
         }
       }
+
+      if (version != _requestVersion ||
+          _disposed ||
+          sessionVersion != _authViewModel.sessionVersion) {
+        return;
+      }
       result.add(RatingWithMovie(rating: rating, movie: movie));
     }
 
-    return _RatingsFetchResult(ratings: result, anyMovieFailed: anyMovieFailed);
+    if (version != _requestVersion || _disposed) return;
+    ratings = result;
+    status = ratings.isEmpty ? MyRatingsStatus.empty : MyRatingsStatus.success;
+    message = anyMovieFailed ? '일부 영화 정보를 불러오지 못했어요.' : null;
+    notifyListeners();
   }
-}
 
-class _RatingsFetchResult {
-  final List<RatingWithMovie> ratings;
-  final bool anyMovieFailed;
+  Future<void> updateRating(int ratingId, int score, String? comment) async {
+    final version = _authViewModel.sessionVersion;
+    try {
+      final updated = await _ratingApiService.updateRating(
+        ratingId,
+        score,
+        comment,
+      );
+      if (version == _authViewModel.sessionVersion) {
+        _sessionRatingsStore.replace(updated);
+      }
+    } on DioException catch (e) {
+      if (version == _authViewModel.sessionVersion) {
+        await _handleWriteError(e, ratingId: ratingId);
+      }
+      rethrow;
+    }
+  }
 
-  const _RatingsFetchResult({required this.ratings, required this.anyMovieFailed});
+  Future<void> deleteRating(int ratingId) async {
+    final version = _authViewModel.sessionVersion;
+    try {
+      await _ratingApiService.deleteRating(ratingId);
+      if (version == _authViewModel.sessionVersion) {
+        _sessionRatingsStore.remove(ratingId);
+      }
+    } on DioException catch (e) {
+      if (version == _authViewModel.sessionVersion) {
+        await _handleWriteError(e, ratingId: ratingId);
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _handleWriteError(DioException e, {required int ratingId}) async {
+    final code = apiErrorCode(e);
+    if (isAuthExpiredCode(code)) {
+      // 로그인 화면 이동과 만료 안내는 Router와 로그인 화면이 담당한다.
+      await _authViewModel.expireSession();
+    } else if (code == 'RATING404_1') {
+      _sessionRatingsStore.remove(ratingId);
+    }
+    // RATING403_1/RATING409_1/COMMON400/그 외 통신 오류는 로그아웃하지 않고,
+    // 서버 message를 Dialog가 그대로 보여주도록 rethrow만 한다.
+  }
 }

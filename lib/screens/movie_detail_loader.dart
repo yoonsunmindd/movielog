@@ -4,8 +4,9 @@ import '../data/models/tmdb_movie_dto.dart';
 import '../data/services/rating_api_service.dart';
 import '../data/services/tmdb_movie_service.dart';
 import '../theme/app_colors.dart';
-import '../view_models/learning_member_session.dart';
+import '../view_models/auth_view_model.dart';
 import '../view_models/movie_detail_view_model.dart';
+import '../view_models/session_ratings_store.dart';
 import 'movie_detail_screen.dart';
 
 /// extra로 TmdbMovieDto를 안 받았거나 id가 일치하지 않으면 TMDB에서 직접
@@ -35,11 +36,11 @@ class _MovieDetailLoaderState extends State<MovieDetailLoader> {
   }
 
   Widget _buildDetail(BuildContext context, TmdbMovieDto movie) {
-    final memberId = context.read<LearningMemberSession>().memberId;
     return ChangeNotifierProvider<MovieDetailViewModel>(
       create: (context) => MovieDetailViewModel(
         context.read<RatingApiService>(),
-        memberId,
+        context.read<AuthViewModel>(),
+        context.read<SessionRatingsStore>(),
         movie,
       ),
       child: const MovieDetailScreen(),

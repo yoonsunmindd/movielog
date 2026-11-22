@@ -8,44 +8,8 @@ import '../widgets/movielog_button.dart';
 import '../widgets/rating_dialog.dart';
 import '../widgets/tmdb_poster_image.dart';
 
-AppBar _ratingsAppBar(BuildContext context) {
-  return AppBar(
-    backgroundColor: AppColors.background,
-    elevation: 0,
-    centerTitle: true,
-    leading: IconButton(
-      icon: SvgPicture.asset(
-        'assets/icons/arrow_back.svg',
-        colorFilter: const ColorFilter.mode(
-          AppColors.textPrimary,
-          BlendMode.srcIn,
-        ),
-      ),
-      onPressed: () => Navigator.of(context).maybePop(),
-    ),
-    title: Text('내가 등록한 평점', style: Theme.of(context).textTheme.titleLarge),
-  );
-}
-
-/// 학습용 회원가입을 아직 하지 않은 상태로 이 화면에 들어왔을 때 보여준다.
-class MyRatingsSignUpRequiredScreen extends StatelessWidget {
-  const MyRatingsSignUpRequiredScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _ratingsAppBar(context),
-      body: Center(
-        child: Text(
-          '학습용 회원가입이 필요합니다.',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: AppColors.textTertiary),
-        ),
-      ),
-    );
-  }
-}
+const _sessionOnlyNotice = '이번 로그인 세션에서 등록한 평점만 표시돼요. 앱을 다시 시작하면 이전 평점은 '
+    '이 화면에 나타나지 않아요.';
 
 class MyRatingsScreen extends StatelessWidget {
   const MyRatingsScreen({super.key});
@@ -53,26 +17,34 @@ class MyRatingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: _ratingsAppBar(context),
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: SvgPicture.asset(
+            'assets/icons/arrow_back.svg',
+            colorFilter: const ColorFilter.mode(
+              AppColors.textPrimary,
+              BlendMode.srcIn,
+            ),
+          ),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: Text('내가 등록한 평점', style: Theme.of(context).textTheme.titleLarge),
+      ),
       body: Consumer<MyRatingsViewModel>(
         builder: (context, viewModel, _) {
           switch (viewModel.status) {
             case MyRatingsStatus.idle:
             case MyRatingsStatus.loading:
               return const _RatingsLoading();
-            case MyRatingsStatus.error:
-              return _RatingsError(
-                message: viewModel.message ?? '평점을 불러오지 못했어요.',
-                onRetry: viewModel.load,
-              );
             case MyRatingsStatus.empty:
               return const _RatingsEmpty();
             case MyRatingsStatus.success:
               return _RatingsList(
                 ratings: viewModel.ratings,
                 message: viewModel.message,
-                refreshWarning: viewModel.refreshWarning,
-                onRefresh: viewModel.load,
               );
           }
         },
@@ -110,39 +82,25 @@ class _RatingsEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(
-        '등록한 평점이 없어요',
-        style: Theme.of(
-          context,
-        ).textTheme.bodyMedium?.copyWith(color: AppColors.textTertiary),
-      ),
-    );
-  }
-}
-
-class _RatingsError extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _RatingsError({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              message,
-              textAlign: TextAlign.center,
+              '등록한 평점이 없어요',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: AppColors.textTertiary),
             ),
-            const SizedBox(height: 16),
-            MovieLogButton(label: '다시 시도', onPressed: onRetry),
+            const SizedBox(height: 12),
+            Text(
+              _sessionOnlyNotice,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: AppColors.textTertiary),
+            ),
           ],
         ),
       ),
@@ -153,40 +111,14 @@ class _RatingsError extends StatelessWidget {
 class _RatingsList extends StatelessWidget {
   final List<RatingWithMovie> ratings;
   final String? message;
-  final String? refreshWarning;
-  final VoidCallback onRefresh;
 
-  const _RatingsList({
-    required this.ratings,
-    this.message,
-    this.refreshWarning,
-    required this.onRefresh,
-  });
+  const _RatingsList({required this.ratings, this.message});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (refreshWarning != null)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: AppColors.errorRed.withValues(alpha: 0.08),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    refreshWarning!,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: AppColors.errorRed),
-                  ),
-                ),
-                TextButton(onPressed: onRefresh, child: const Text('다시 조회')),
-              ],
-            ),
-          )
-        else if (message != null)
+        if (message != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Text(
@@ -203,6 +135,16 @@ class _RatingsList extends StatelessWidget {
             separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) =>
                 _RatingCard(ratingWithMovie: ratings[index]),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Text(
+            _sessionOnlyNotice,
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: AppColors.textTertiary),
           ),
         ),
       ],

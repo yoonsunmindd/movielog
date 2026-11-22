@@ -1,8 +1,27 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:movielog/core/storage/token_storage.dart';
+import 'package:movielog/data/models/rating_dto.dart';
+import 'package:movielog/data/services/auth_api_service.dart';
+import 'package:movielog/data/services/member_api_service.dart';
 import 'package:movielog/data/services/rating_api_service.dart';
 import 'package:movielog/data/services/tmdb_movie_service.dart';
+import 'package:movielog/view_models/auth_view_model.dart';
 import 'package:movielog/view_models/my_ratings_view_model.dart';
+import 'package:movielog/view_models/session_ratings_store.dart';
+
+class _FakeTokenStorage implements TokenStorage {
+  String? token = 'fake-token';
+
+  @override
+  Future<void> saveAccessToken(String token) async => this.token = token;
+
+  @override
+  Future<String?> readAccessToken() async => token;
+
+  @override
+  Future<void> deleteAccessToken() async => token = null;
+}
 
 Dio _fakeMovieDio() {
   final dio = Dio();
@@ -29,152 +48,98 @@ Dio _fakeMovieDio() {
   return dio;
 }
 
-const _sampleRating = {
-  'ratingId': 1,
-  'movieId': 1,
-  'score': 4,
-  'comment': null,
-  'createdAt': '2026-01-01T00:00:00.000Z',
-};
+AuthViewModel _signedInAuthViewModel(SessionRatingsStore store) {
+  final authViewModel = AuthViewModel(
+    AuthApiService(Dio()),
+    MemberApiService(Dio()),
+    _FakeTokenStorage(),
+    store,
+  );
+  authViewModel.status = AuthStatus.signedIn;
+  return authViewModel;
+}
+
+RatingDto _rating(int ratingId) => RatingDto(
+  ratingId: ratingId,
+  movieId: 1,
+  score: 4,
+  comment: null,
+  createdAt: DateTime.parse('2026-01-01T00:00:00.000Z'),
+);
+
+Dio _rejectingAuthDio(String code, int statusCode) {
+  final dio = Dio();
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) {
+        handler.reject(
+          DioException(
+            requestOptions: options,
+            response: Response(
+              requestOptions: options,
+              statusCode: statusCode,
+              data: {'isSuccess': false, 'code': code, 'message': '실패'},
+            ),
+          ),
+        );
+      },
+    ),
+  );
+  return dio;
+}
 
 void main() {
-  test('쓰기 성공 후 재조회 실패 시 refreshWarning이 설정되고 쓰기는 실패로 던지지 않는다', () async {
-    var getCallCount = 0;
-    final dio = Dio();
-    dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          if (options.method == 'GET') {
-            getCallCount++;
-            if (getCallCount == 1) {
-              handler.resolve(
-                Response(
-                  requestOptions: options,
-                  statusCode: 200,
-                  data: [_sampleRating],
-                ),
-              );
-            } else {
-              handler.reject(
-                DioException(
-                  requestOptions: options,
-                  type: DioExceptionType.connectionError,
-                ),
-              );
-            }
-          } else {
-            handler.resolve(Response(requestOptions: options, statusCode: 200));
-          }
-        },
-      ),
+  test('403이면 로그아웃하지 않는다', () async {
+    final store = SessionRatingsStore()..add(_rating(1));
+    final authViewModel = _signedInAuthViewModel(store);
+    final ratingApiService = RatingApiService(
+      Dio(),
+      _rejectingAuthDio('RATING403_1', 403),
     );
-
     final viewModel = MyRatingsViewModel(
-      1,
-      RatingApiService(dio),
+      ratingApiService,
       TmdbMovieService(_fakeMovieDio()),
+      authViewModel,
+      store,
     );
-
-    await viewModel.load();
-    expect(viewModel.status, MyRatingsStatus.success);
-
-    await viewModel.updateRating(1, 5, '좋아요');
-
-    expect(viewModel.refreshWarning, isNotNull);
-    expect(viewModel.status, MyRatingsStatus.success);
-  });
-
-  test('403/404 오류면 재조회하고 rethrow 한다', () async {
-    var getCallCount = 0;
-    final dio = Dio();
-    dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          if (options.method == 'GET') {
-            getCallCount++;
-            handler.resolve(
-              Response(requestOptions: options, statusCode: 200, data: []),
-            );
-          } else {
-            handler.reject(
-              DioException(
-                requestOptions: options,
-                response: Response(
-                  requestOptions: options,
-                  statusCode: 403,
-                  data: {
-                    'isSuccess': false,
-                    'code': 'COMMON403',
-                    'message': '권한이 없어요',
-                  },
-                ),
-              ),
-            );
-          }
-        },
-      ),
-    );
-
-    final viewModel = MyRatingsViewModel(
-      1,
-      RatingApiService(dio),
-      TmdbMovieService(_fakeMovieDio()),
-    );
-
-    await viewModel.load();
-    expect(getCallCount, 1);
 
     await expectLater(
       () => viewModel.updateRating(1, 5, null),
       throwsA(isA<DioException>()),
     );
-    expect(getCallCount, 2);
+
+    expect(authViewModel.status, AuthStatus.signedIn);
+    expect(store.ratings, hasLength(1));
   });
 
-  test('400/409 오류면 재조회하지 않고 rethrow만 한다', () async {
-    var getCallCount = 0;
-    final dio = Dio();
-    dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          if (options.method == 'GET') {
-            getCallCount++;
-            handler.resolve(
-              Response(requestOptions: options, statusCode: 200, data: []),
-            );
-          } else {
-            handler.reject(
-              DioException(
-                requestOptions: options,
-                response: Response(
-                  requestOptions: options,
-                  statusCode: 409,
-                  data: {
-                    'isSuccess': false,
-                    'code': 'COMMON4091',
-                    'message': '이미 등록된 평점이에요',
-                  },
-                ),
-              ),
-            );
-          }
-        },
-      ),
+  test('404면 세션 평점에서 해당 항목을 제거한다', () async {
+    final store = SessionRatingsStore()..add(_rating(1));
+    final authViewModel = _signedInAuthViewModel(store);
+    final ratingApiService = RatingApiService(
+      Dio(),
+      _rejectingAuthDio('RATING404_1', 404),
     );
-
     final viewModel = MyRatingsViewModel(
-      1,
-      RatingApiService(dio),
+      ratingApiService,
       TmdbMovieService(_fakeMovieDio()),
+      authViewModel,
+      store,
     );
-
-    await viewModel.load();
-    expect(getCallCount, 1);
 
     await expectLater(
-      () => viewModel.deleteRating(1),
+      () => viewModel.updateRating(1, 5, null),
       throwsA(isA<DioException>()),
     );
-    expect(getCallCount, 1);
+
+    expect(store.ratings, isEmpty);
+  });
+
+  test('로그아웃하면 이전 세션의 평점이 비워진다', () async {
+    final store = SessionRatingsStore()..add(_rating(1));
+    final authViewModel = _signedInAuthViewModel(store);
+
+    expect(store.ratings, hasLength(1));
+    await authViewModel.logout();
+    expect(store.ratings, isEmpty);
   });
 }

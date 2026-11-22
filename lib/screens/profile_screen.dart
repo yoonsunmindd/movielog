@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_colors.dart';
+import '../view_models/auth_view_model.dart';
 import '../widgets/profile_header.dart';
 import '../widgets/stat_section.dart';
 import '../widgets/genre_section.dart';
@@ -12,8 +14,18 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final member = context.watch<AuthViewModel>().member;
+
     return Scaffold(
-      appBar: MovieLogAppBar(title: '내 프로필'),
+      appBar: MovieLogAppBar(
+        title: '내 프로필',
+        actions: [
+          TextButton(
+            onPressed: () => context.read<AuthViewModel>().logout(),
+            child: const Text('로그아웃'),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -24,11 +36,13 @@ class ProfileScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const ProfileHeader(),
+                ProfileHeader(nickname: member?.nickname, email: member?.email),
                 const SizedBox(height: 32),
 
                 OutlinedButton(
-                  onPressed: () {},
+                  onPressed: member == null
+                      ? null
+                      : () => context.push('/my/profile/edit'),
                   child: const Text('프로필 수정'),
                 ),
                 const SizedBox(height: 32),

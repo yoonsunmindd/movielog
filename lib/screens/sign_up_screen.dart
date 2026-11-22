@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import '../data/models/create_member_request.dart';
 import '../theme/app_colors.dart';
 import '../utils/validators.dart';
-import '../view_models/learning_member_session.dart';
 import '../view_models/sign_up_view_model.dart';
 import '../view_models/submit_status.dart';
 import '../widgets/sign_up_header.dart';
@@ -96,12 +95,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (!mounted) return;
 
     if (viewModel.submitStatus == SubmitStatus.success) {
-      // go()를 사용해 스택을 교체하므로 영화 목록 화면에서 시스템 뒤로가기로
+      // go()를 사용해 스택을 교체하므로 로그인 화면에서 시스템 뒤로가기로
       // 회원가입 화면으로 돌아갈 수 없다.
-      context.read<LearningMemberSession>().setMemberId(
-        viewModel.createdMemberId!,
-      );
-      context.go('/movies');
+      context.go('/login', extra: true);
     } else if (viewModel.snackbarMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(viewModel.snackbarMessage!)),

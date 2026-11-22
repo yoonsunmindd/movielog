@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 class ProfileHeader extends StatelessWidget {
-  const ProfileHeader({super.key});
+  final String? nickname;
+  final String? email;
+
+  const ProfileHeader({super.key, this.nickname, this.email});
 
   @override
   Widget build(BuildContext context) {
@@ -9,7 +12,7 @@ class ProfileHeader extends StatelessWidget {
 
     return Column(
       children: [
-        // 프로필 이미지
+        // 프로필 이미지 (Figma 예시 그대로 고정)
         CircleAvatar(
           radius: 52,
           backgroundImage: AssetImage(
@@ -26,20 +29,23 @@ class ProfileHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        
+
         // 닉네임
         Text(
-          '무비러버',
+          nickname ?? '불러오는 중...',
           style: textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
-        
-        // 소개 문구
-        Text(
-          '좋아하는 영화를 기록하고 있어요',
-          textAlign: TextAlign.center,
-          style: textTheme.bodyMedium,
-        ),
+
+        if (email != null)
+          Text(email!, style: textTheme.bodyMedium)
+        else
+          // 소개 문구 (Figma 예시 그대로 고정)
+          Text(
+            '좋아하는 영화를 기록하고 있어요',
+            textAlign: TextAlign.center,
+            style: textTheme.bodyMedium,
+          ),
       ],
     );
   }

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../core/network/api_error.dart';
 import '../data/models/create_member_request.dart';
 import '../data/services/sign_up_service.dart';
 import 'submit_status.dart';
@@ -160,7 +161,7 @@ class SignUpViewModel extends ChangeNotifier {
       submitStatus = SubmitStatus.success;
     } on DioException catch (e) {
       submitStatus = SubmitStatus.error;
-      final message = writeSignUpErrorMessage(e);
+      final message = apiErrorMessage(e);
       if (e.response?.statusCode == 400 && message.contains('비밀번호')) {
         passwordErrorText = message;
       } else {
