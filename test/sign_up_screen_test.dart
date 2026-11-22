@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
-import 'package:movielog/data/services/member_check_service.dart';
+import 'package:movielog/data/services/sign_up_service.dart';
 import 'package:movielog/screens/sign_up_screen.dart';
 import 'package:movielog/view_models/sign_up_view_model.dart';
 
@@ -32,7 +32,7 @@ void main() {
       MaterialApp(
         home: ChangeNotifierProvider<SignUpViewModel>(
           create: (_) =>
-              SignUpViewModel(MemberCheckService(fakeAvailableDio())),
+              SignUpViewModel(SignUpService(fakeAvailableDio())),
           child: const SignUpScreen(),
         ),
       ),
@@ -42,7 +42,7 @@ void main() {
   testWidgets('입력 전에는 오류 메시지와 검증 아이콘이 보이지 않는다', (tester) async {
     await pumpSignUpScreen(tester);
 
-    expect(find.text('닉네임은 2자 이상 입력해주세요.'), findsNothing);
+    expect(find.text('닉네임은 2~12자로 입력해주세요.'), findsNothing);
     expect(find.text('올바른 이메일 형식이 아니에요.'), findsNothing);
     expect(find.text('비밀번호는 8자 이상 입력해주세요.'), findsNothing);
 
@@ -60,7 +60,7 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(2), 'short');
     await tester.pump();
 
-    expect(find.text('닉네임은 2자 이상 입력해주세요.'), findsOneWidget);
+    expect(find.text('닉네임은 2~12자로 입력해주세요.'), findsOneWidget);
     expect(find.text('올바른 이메일 형식이 아니에요.'), findsOneWidget);
     expect(find.text('비밀번호는 8자 이상 입력해주세요.'), findsOneWidget);
   });
@@ -75,7 +75,7 @@ void main() {
       find.byType(TextFormField).at(1),
       'movie@example.com',
     );
-    await tester.enterText(find.byType(TextFormField).at(2), 'password123');
+    await tester.enterText(find.byType(TextFormField).at(2), 'Password123!');
     await tester.pump();
 
     await tester.tap(find.widgetWithText(ElevatedButton, '중복 확인').at(0));

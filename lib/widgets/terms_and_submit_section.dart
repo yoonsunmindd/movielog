@@ -7,6 +7,7 @@ class TermsAndSubmitSection extends StatelessWidget {
   final bool agreedToTerms;
   final ValueChanged<bool> onAgreedToTermsChanged;
   final bool isSubmitEnabled;
+  final bool isSubmitting;
   final VoidCallback onSubmit;
 
   const TermsAndSubmitSection({
@@ -14,6 +15,7 @@ class TermsAndSubmitSection extends StatelessWidget {
     required this.agreedToTerms,
     required this.onAgreedToTermsChanged,
     required this.isSubmitEnabled,
+    this.isSubmitting = false,
     required this.onSubmit,
   });
 
@@ -54,6 +56,7 @@ class TermsAndSubmitSection extends StatelessWidget {
         MovieLogButton(
           label: '가입하기',
           onPressed: isSubmitEnabled ? onSubmit : null,
+          isLoading: isSubmitting,
           width: double.infinity,
           disabledBackgroundColor: AppColors.primaryLight,
           disabledForegroundColor: AppColors.primary,

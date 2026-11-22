@@ -18,7 +18,7 @@ class TmdbFeaturedMovieCard extends StatelessWidget {
         : null;
 
     return GestureDetector(
-      onTap: () => context.push('/movies/${movie.id}'),
+      onTap: () => context.push('/movies/${movie.id}', extra: movie),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: AspectRatio(
@@ -102,7 +102,8 @@ class TmdbFeaturedMovieCard extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () => context.push('/movies/${movie.id}'),
+                        onPressed: () =>
+                            context.push('/movies/${movie.id}', extra: movie),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white.withValues(
                             alpha: 0.95,

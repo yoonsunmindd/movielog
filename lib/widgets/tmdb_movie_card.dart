@@ -20,7 +20,7 @@ class TmdbMovieCard extends StatelessWidget {
         : null;
 
     return GestureDetector(
-      onTap: () => context.push('/movies/${movie.id}'),
+      onTap: () => context.push('/movies/${movie.id}', extra: movie),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

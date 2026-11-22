@@ -1,18 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../models/movie.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_colors.dart';
-import '../widgets/movie_rating_input_dialog.dart';
-import '../widgets/similar_movies_section.dart';
+import '../view_models/movie_detail_view_model.dart';
+import '../widgets/rating_dialog.dart';
+import '../widgets/tmdb_poster_image.dart';
 
-// TODO(5주차 TMDB 연동): 홈/목록은 TMDB id를 쓰지만 이 화면은 아직 Mock
-// 데이터(findMovieById)를 그대로 써서, TMDB 영화를 눌러 들어오면 "영화를
-// 찾을 수 없어요"가 뜬다. 상세 화면의 TMDB 전환은 이번 주 범위 밖.
 class MovieDetailScreen extends StatefulWidget {
-  final String movieId;
-
-  const MovieDetailScreen({super.key, required this.movieId});
+  const MovieDetailScreen({super.key});
 
   @override
   State<MovieDetailScreen> createState() => _MovieDetailScreenState();
@@ -20,50 +15,44 @@ class MovieDetailScreen extends StatefulWidget {
 
 class _MovieDetailScreenState extends State<MovieDetailScreen> {
   bool _isFavorite = false;
-  double? _userRating;
 
   void _toggleFavorite() {
     setState(() => _isFavorite = !_isFavorite);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isFavorite ? '즐겨찾기에 추가했어요' : '즐겨찾기에서 삭제했어요'),
-      ),
+      SnackBar(content: Text(_isFavorite ? '즐겨찾기에 추가했어요' : '즐겨찾기에서 삭제했어요')),
     );
   }
 
-  Future<void> _openRatingDialog() async {
-    final result = await showDialog<double>(
+  Future<void> _openRatingDialog(MovieDetailViewModel viewModel) async {
+    final result = await showDialog<bool>(
       context: context,
-      builder: (_) => MovieRatingInputDialog(initialRating: _userRating ?? 0),
+      barrierDismissible: false,
+      builder: (_) => RatingDialog(onSubmit: viewModel.createRating),
     );
-    if (result != null && mounted) {
-      setState(() => _userRating = result);
+
+    if (result == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('평점을 등록했어요 (${result.toStringAsFixed(1)}점)')),
+        const SnackBar(
+          content: Text('평점을 등록했습니다. 마이페이지의 "내가 등록한 평점"에서 확인할 수 있습니다.'),
+        ),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final movie = findMovieById(widget.movieId);
+    final viewModel = context.watch<MovieDetailViewModel>();
+    final movie = viewModel.movie;
     final textTheme = Theme.of(context).textTheme;
-
-    if (movie == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Cinema Archive')),
-        body: const Center(child: Text('영화를 찾을 수 없어요.')),
-      );
-    }
+    final year = (movie.releaseDate != null && movie.releaseDate!.length >= 4)
+        ? movie.releaseDate!.substring(0, 4)
+        : null;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Cinema Archive',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontWeight: FontWeight.w700,
-          ),
+          'MovieLog',
+          style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
         elevation: 0,
@@ -92,7 +81,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           children: [
             AspectRatio(
               aspectRatio: 3 / 4,
-              child: Image.asset(movie.posterAsset, fit: BoxFit.cover),
+              child: TmdbPosterImage(posterPath: movie.posterPath, fit: BoxFit.cover),
             ),
             Padding(
               padding: const EdgeInsets.all(20),
@@ -100,60 +89,26 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(movie.title, style: textTheme.titleLarge),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${movie.year} · ${movie.genre} · ${movie.runtimeMinutes}분',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textTertiary,
+                  if (year != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      year,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textTertiary,
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      RatingBarIndicator(
-                        rating: movie.rating,
-                        itemCount: 5,
-                        itemSize: 20,
-                        unratedColor: AppColors.border,
-                        itemBuilder: (context, _) =>
-                            const Icon(Icons.star, color: AppColors.primary),
-                      ),
-                      const SizedBox(width: 8),
+                      const Icon(Icons.star, color: AppColors.primary, size: 20),
+                      const SizedBox(width: 4),
                       Text(
-                        movie.rating.toStringAsFixed(1),
+                        movie.voteAverage.toStringAsFixed(1),
                         style: textTheme.bodyLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      Text(
-                        ' (${movie.reviewCount})',
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_userRating != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      '내가 남긴 평점: ${_userRating!.toStringAsFixed(1)}점',
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final tag in movie.tags)
-                        Chip(
-                          label: Text(tag),
-                          backgroundColor: AppColors.primaryLight,
-                          side: BorderSide.none,
-                        ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -162,12 +117,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   Text('시놉시스', style: textTheme.titleMedium),
                   const SizedBox(height: 12),
                   Text(
-                    movie.synopsis,
+                    movie.overview.isEmpty ? '등록된 줄거리가 없어요.' : movie.overview,
                     style: textTheme.bodyMedium?.copyWith(height: 1.6),
                   ),
-                  const SizedBox(height: 24),
-                  SimilarMoviesSection(currentMovie: movie),
-                  const SizedBox(height: 16),
                 ],
               ),
             ),
@@ -177,52 +129,70 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _toggleFavorite,
-                  icon: SvgPicture.asset(
-                    'assets/icons/bookmark.svg',
-                    width: 18,
-                    height: 18,
-                    colorFilter: ColorFilter.mode(
-                      _isFavorite ? AppColors.primary : AppColors.textTertiary,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                  label: Text(_isFavorite ? '즐겨찾기 완료' : '즐겨찾기'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _isFavorite
-                        ? AppColors.primary
-                        : AppColors.textPrimary,
-                    side: BorderSide(
-                      color: _isFavorite
-                          ? AppColors.primary
-                          : AppColors.border,
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              if (!viewModel.canRate)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '먼저 회원가입을 완료해 주세요',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: AppColors.errorRed,
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _openRatingDialog,
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('평점 남기기'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _toggleFavorite,
+                      icon: SvgPicture.asset(
+                        'assets/icons/bookmark.svg',
+                        width: 18,
+                        height: 18,
+                        colorFilter: ColorFilter.mode(
+                          _isFavorite ? AppColors.primary : AppColors.textTertiary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                      label: Text(_isFavorite ? '즐겨찾기 완료' : '즐겨찾기'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _isFavorite
+                            ? AppColors.primary
+                            : AppColors.textPrimary,
+                        side: BorderSide(
+                          color: _isFavorite ? AppColors.primary : AppColors.border,
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: viewModel.canRate
+                          ? () => _openRatingDialog(viewModel)
+                          : null,
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('평점 남기기'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: AppColors.border,
+                        disabledForegroundColor: AppColors.textTertiary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

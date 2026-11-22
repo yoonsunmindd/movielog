@@ -1,13 +1,15 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import '../data/services/member_check_service.dart';
+import '../data/models/create_member_request.dart';
+import '../data/services/sign_up_service.dart';
+import 'submit_status.dart';
 
 enum CheckStatus { idle, checking, available, duplicated, error }
 
-/// 회원가입 화면의 닉네임/이메일 중복 확인 상태를 관리한다.
-/// 두 필드는 서로 영향이 없게 각각 독립된 필드 세트로 따로 관리한다.
+/// 회원가입 화면의 닉네임/이메일 중복 확인과 제출 상태를 관리한다.
+/// 닉네임/이메일은 서로 영향이 없게 각각 독립된 필드 세트로 따로 관리한다.
 class SignUpViewModel extends ChangeNotifier {
-  final MemberCheckService _service;
+  final SignUpService _service;
 
   SignUpViewModel(this._service);
 
@@ -23,6 +25,11 @@ class SignUpViewModel extends ChangeNotifier {
   String? _lastDuplicateEmail;
   int _emailRequestVersion = 0;
 
+  SubmitStatus submitStatus = SubmitStatus.idle;
+  int? createdMemberId;
+  String? passwordErrorText;
+  String? snackbarMessage;
+
   bool _disposed = false;
 
   @override
@@ -32,7 +39,8 @@ class SignUpViewModel extends ChangeNotifier {
   }
 
   /// 입력이 바뀔 때마다 호출한다. 직전에 중복으로 확인된 값과 같으면 재호출 없이
-  /// 바로 duplicated로, 다르면 이전 결과를 무효화(idle)한다.
+  /// 바로 duplicated로, 다르면 이전 결과를 무효화(idle)한다. 서버에서 받은
+  /// 제출 오류(스낵바)도 더 이상 맞지 않는 값이 될 수 있어 함께 무효화한다.
   void onNicknameChanged(String value) {
     nicknameValue = value;
     if (value.isNotEmpty && value == _lastDuplicateNickname) {
@@ -42,6 +50,7 @@ class SignUpViewModel extends ChangeNotifier {
       nicknameStatus = CheckStatus.idle;
       nicknameErrorText = null;
     }
+    _clearSubmitError();
     notifyListeners();
   }
 
@@ -54,7 +63,23 @@ class SignUpViewModel extends ChangeNotifier {
       emailStatus = CheckStatus.idle;
       emailErrorText = null;
     }
+    _clearSubmitError();
     notifyListeners();
+  }
+
+  /// 비밀번호가 바뀌면 서버가 돌려준 비밀번호 오류 문구를 지운다.
+  void onPasswordChanged(String value) {
+    if (passwordErrorText != null) {
+      passwordErrorText = null;
+      notifyListeners();
+    }
+  }
+
+  void _clearSubmitError() {
+    if (submitStatus == SubmitStatus.error) {
+      submitStatus = SubmitStatus.idle;
+    }
+    snackbarMessage = null;
   }
 
   Future<void> checkNickname() async {
@@ -112,6 +137,38 @@ class SignUpViewModel extends ChangeNotifier {
       if (version != _emailRequestVersion || _disposed) return;
       emailStatus = CheckStatus.error;
       emailErrorText = '중복 확인에 실패했습니다. 다시 시도해 주세요.';
+    }
+
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> submit(CreateMemberRequest request) async {
+    if (submitStatus == SubmitStatus.submitting) return;
+
+    submitStatus = SubmitStatus.submitting;
+    passwordErrorText = null;
+    snackbarMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _service.signUp(request);
+      final memberId = response.result?.memberId;
+      if (memberId == null) {
+        throw StateError('회원가입 응답에 memberId가 없습니다.');
+      }
+      createdMemberId = memberId;
+      submitStatus = SubmitStatus.success;
+    } on DioException catch (e) {
+      submitStatus = SubmitStatus.error;
+      final message = writeSignUpErrorMessage(e);
+      if (e.response?.statusCode == 400 && message.contains('비밀번호')) {
+        passwordErrorText = message;
+      } else {
+        snackbarMessage = message;
+      }
+    } catch (e) {
+      submitStatus = SubmitStatus.error;
+      snackbarMessage = '회원가입에 실패했어요. 다시 시도해 주세요.';
     }
 
     if (!_disposed) notifyListeners();

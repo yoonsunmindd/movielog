@@ -6,6 +6,7 @@ class MovieLogButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
   final bool isLoading;
+  final bool isSecondary;
   final double? width;
   final Color disabledBackgroundColor;
   final Color disabledForegroundColor;
@@ -15,6 +16,7 @@ class MovieLogButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.isLoading = false,
+    this.isSecondary = false,
     this.width,
     this.disabledBackgroundColor = AppColors.border,
     this.disabledForegroundColor = AppColors.textTertiary,
@@ -28,8 +30,8 @@ class MovieLogButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          backgroundColor: isSecondary ? AppColors.primaryLight : AppColors.primary,
+          foregroundColor: isSecondary ? AppColors.primary : Colors.white,
           disabledBackgroundColor: isLoading
               ? AppColors.textSecondary
               : disabledBackgroundColor,

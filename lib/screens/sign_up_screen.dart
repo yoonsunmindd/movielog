@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../data/models/create_member_request.dart';
 import '../theme/app_colors.dart';
 import '../utils/validators.dart';
+import '../view_models/learning_member_session.dart';
 import '../view_models/sign_up_view_model.dart';
+import '../view_models/submit_status.dart';
 import '../widgets/sign_up_header.dart';
 import '../widgets/sign_up_form_section.dart';
 import '../widgets/terms_and_submit_section.dart';
@@ -65,24 +68,44 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _isEmailFormatValid &&
       _isPasswordValid &&
       _agreedToTerms &&
+      viewModel.submitStatus != SubmitStatus.submitting &&
       viewModel.nicknameStatus == CheckStatus.available &&
       viewModel.emailStatus == CheckStatus.available;
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     setState(() {
       _nicknameTouched = true;
       _emailTouched = true;
       _passwordTouched = true;
     });
 
+    final viewModel = context.read<SignUpViewModel>();
     final isValid = _formKey.currentState?.validate() ?? false;
     FocusScope.of(context).unfocus();
 
-    if (isValid && _isSubmitEnabled(context.read<SignUpViewModel>())) {
-      // Mock 회원가입: 실제 API 연동 없이 홈으로 이동.
-      // go()를 사용해 스택을 교체하므로 홈 화면에서 시스템 뒤로가기로
+    if (!isValid || !_isSubmitEnabled(viewModel)) return;
+
+    await viewModel.submit(
+      CreateMemberRequest(
+        email: _emailController.text,
+        nickname: _nicknameController.text,
+        password: _passwordController.text,
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (viewModel.submitStatus == SubmitStatus.success) {
+      // go()를 사용해 스택을 교체하므로 영화 목록 화면에서 시스템 뒤로가기로
       // 회원가입 화면으로 돌아갈 수 없다.
-      context.go('/home');
+      context.read<LearningMemberSession>().setMemberId(
+        viewModel.createdMemberId!,
+      );
+      context.go('/movies');
+    } else if (viewModel.snackbarMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(viewModel.snackbarMessage!)),
+      );
     }
   }
 
@@ -132,7 +155,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         emailFormatError == null &&
         viewModel.emailStatus == CheckStatus.available;
 
-    return Scaffold(
+    final passwordFormatError = _passwordTouched
+        ? Validators.password(_passwordController.text)
+        : null;
+    final passwordErrorText = passwordFormatError ?? viewModel.passwordErrorText;
+
+    return PopScope(
+      canPop: viewModel.submitStatus != SubmitStatus.submitting,
+      child: Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
@@ -180,9 +210,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           passwordFocusNode: _passwordFocusNode,
                           nicknameErrorText: nicknameErrorText,
                           emailErrorText: emailErrorText,
-                          passwordErrorText: _passwordTouched
-                              ? Validators.password(_passwordController.text)
-                              : null,
+                          passwordErrorText: passwordErrorText,
                           isNicknameValid: isNicknameValid,
                           isEmailValid: isEmailValid,
                           isPasswordValid: _passwordTouched && _isPasswordValid,
@@ -220,8 +248,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             setState(() => _emailTouched = true);
                             viewModel.onEmailChanged(value);
                           },
-                          onPasswordChanged: (value) =>
-                              setState(() => _passwordTouched = true),
+                          onPasswordChanged: (value) {
+                            setState(() => _passwordTouched = true);
+                            viewModel.onPasswordChanged(value);
+                          },
                           onTogglePasswordVisibility: () => setState(
                             () => _obscurePassword = !_obscurePassword,
                           ),
@@ -239,6 +269,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           onAgreedToTermsChanged: (value) =>
                               setState(() => _agreedToTerms = value),
                           isSubmitEnabled: _isSubmitEnabled(viewModel),
+                          isSubmitting: viewModel.submitStatus == SubmitStatus.submitting,
                           onSubmit: _handleSubmit,
                         ),
                       ],
@@ -249,6 +280,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             );
           },
         ),
+      ),
       ),
     );
   }
