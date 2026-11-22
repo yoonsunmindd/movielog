@@ -1,6 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'core/network/movie_log_client.dart';
+import 'core/network/tmdb_client.dart';
+import 'core/storage/token_storage.dart';
+import 'data/services/auth_api_service.dart';
+import 'data/services/member_api_service.dart';
+import 'data/services/rating_api_service.dart';
+import 'data/services/sign_up_service.dart';
+import 'data/services/tmdb_movie_service.dart';
+import 'theme/app_theme.dart';
+import 'router/app_router.dart';
+import 'view_models/auth_view_model.dart';
+import 'view_models/session_ratings_store.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
   runApp(const MovieLogApp());
 }
 
@@ -9,98 +26,92 @@ class MovieLogApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'MovieLog',
-      theme: ThemeData(
-        useMaterial3: true,
-        primarySwatch: Colors.deepPurple,
-      ),
-      home: const StartScreen(),
+    final movieLogDio = createMovieLogClient();
+    final tokenStorage = SecureTokenStorage();
+    final authMovieLogDio = createAuthMovieLogClient(tokenStorage);
+
+    return MultiProvider(
+      providers: [
+        Provider<TmdbMovieService>(
+          create: (_) => TmdbMovieService(createTmdbClient()),
+        ),
+        Provider<SignUpService>(
+          create: (_) => SignUpService(movieLogDio),
+        ),
+        Provider<RatingApiService>(
+          create: (_) => RatingApiService(movieLogDio, authMovieLogDio),
+        ),
+        Provider<TokenStorage>(create: (_) => tokenStorage),
+        Provider<AuthApiService>(
+          create: (_) => AuthApiService(movieLogDio),
+        ),
+        Provider<MemberApiService>(
+          create: (_) => MemberApiService(authMovieLogDio),
+        ),
+        ChangeNotifierProvider<SessionRatingsStore>(
+          create: (_) => SessionRatingsStore(),
+        ),
+        ChangeNotifierProvider<AuthViewModel>(
+          create: (context) => AuthViewModel(
+            context.read<AuthApiService>(),
+            context.read<MemberApiService>(),
+            context.read<TokenStorage>(),
+            context.read<SessionRatingsStore>(),
+          ),
+        ),
+      ],
+      child: const _MovieLogRouterApp(),
     );
   }
 }
 
-class StartScreen extends StatelessWidget {
-  const StartScreen({super.key});
+/// GoRouter를 initState에서 한 번만 만들고, 첫 프레임 이후 세션 복구를
+/// 시작한다. signedIn으로 바뀔 때마다 내 정보를 한 번 불러온다(ShellRoute가
+/// 없어서, 화면마다 각자 부르는 대신 여기서 한 곳에만 걸어둔다).
+class _MovieLogRouterApp extends StatefulWidget {
+  const _MovieLogRouterApp();
+
+  @override
+  State<_MovieLogRouterApp> createState() => _MovieLogRouterAppState();
+}
+
+class _MovieLogRouterAppState extends State<_MovieLogRouterApp> {
+  late final AuthViewModel _authViewModel;
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _authViewModel = context.read<AuthViewModel>();
+    _router = AppRouter.createRouter(_authViewModel);
+    _authViewModel.addListener(_handleAuthChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _authViewModel.restoreSession();
+    });
+  }
+
+  void _handleAuthChanged() {
+    if (_authViewModel.status == AuthStatus.signedIn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _authViewModel.loadMember();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _authViewModel.removeListener(_handleAuthChanged);
+    _router.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // 1. "FLUTTER 0주차" 작은 텍스트
-            const Text(
-              'FLUTTER 0주차',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // 2. 아이콘
-            const Icon(
-              Icons.movie_outlined,
-              size: 80,
-              color: Colors.deepPurple,
-            ),
-            const SizedBox(height: 48),
-
-            // 3. 제목
-            const Text(
-              '영화의 순간을\n기록하세요',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 4. 설명
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                '보고 싶은 영화부터 나만의 평점까지\n한곳에서 관리해요',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-              ),
-            ),
-            const SizedBox(height: 48),
-
-            // 5. 버튼
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: ElevatedButton(
-                onPressed: () {
-                  debugPrint('시작하기 버튼을 눌렀습니다.');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  '시작하기',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return MaterialApp.router(
+      debugShowCheckedModeBanner: false,
+      title: 'MovieLog',
+      theme: AppTheme.light,
+      routerConfig: _router,
     );
   }
 }
